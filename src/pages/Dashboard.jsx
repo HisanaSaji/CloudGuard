@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell,
 } from 'recharts';
@@ -261,7 +261,80 @@ const Dashboard = () => {
 
   const toggleChat = () => setIsChatOpen(prev => !prev);
 
-  // Timeline range options
+  // Date range calculation functions
+  const calculateDateRange = (option) => {
+    const now = new Date();
+    let from, to, label, displayFrom, displayTo;
+
+    switch (option) {
+      case 'today':
+        from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+        to = now;
+        label = 'Today';
+        break;
+      case 'yesterday':
+        from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+        to = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+        label = 'Yesterday';
+        break;
+      case 'last7days':
+        from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0);
+        to = now;
+        label = 'Last 7 Days';
+        break;
+      case 'last30days':
+        from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29, 0, 0, 0);
+        to = now;
+        label = 'Last 30 Days';
+        break;
+      case 'custom':
+        // For custom, we'll use the dates from state when they're set
+        if (customFromDate && customToDate) {
+          from = new Date(customFromDate + 'T00:00:00');
+          to = new Date(customToDate + 'T23:59:59');
+          label = `${customFromDate} to ${customToDate}`;
+        } else {
+          return dateRange; // Return current if not set
+        }
+        break;
+      default:
+        return dateRange;
+    }
+
+    displayFrom = from.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    displayTo = to.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    return {
+      from: from.toISOString().split('T')[0] + 'T00:00:00',
+      to: to.toISOString(),
+      label,
+      displayFrom,
+      displayTo
+    };
+  };
+
+  // Handle date range option change
+  const handleDateRangeChange = (option) => {
+    if (option === 'custom') {
+      setShowCustomModal(true);
+      return;
+    }
+    setDateRangeOption(option);
+    const newRange = calculateDateRange(option);
+    setDateRange(newRange);
+  };
+
+  // Handle custom date range submission
+  const handleCustomDateSubmit = () => {
+    if (customFromDate && customToDate) {
+      const newRange = calculateDateRange('custom');
+      setDateRange(newRange);
+      setDateRangeOption('custom');
+      setShowCustomModal(false);
+    }
+  };
+
+  // Timeline range options (for chart visualization only)
   const timelineRanges = [
     { value: '6h', label: 'Last 6 Hours', hours: 6, interval: 'hour' },
     { value: '24h', label: 'Last 24 Hours', hours: 24, interval: 'hour' },
@@ -272,15 +345,24 @@ const Dashboard = () => {
   // Fetch dashboard data from backend
   const fetchDashboardData = async () => {
     try {
-      // Get selected timeline range
+      // Build query parameters with date range
+      const params = new URLSearchParams();
+      if (dateRange.from) params.append('from_date', dateRange.from);
+      if (dateRange.to) params.append('to_date', dateRange.to);
+      
+      const queryString = params.toString();
+      const queryPrefix = queryString ? `?${queryString}` : '';
+      const querySeparator = queryString ? '&' : '?';
+      
+      // Get selected timeline range for interval calculation
       const selectedRange = timelineRanges.find(r => r.value === timelineRange) || timelineRanges[1];
       
-      // Fetch stats and chart data in parallel
+      // Fetch stats and chart data in parallel with date range
       const [statsRes, chartDataRes, timelineRes, threatRes] = await Promise.allSettled([
-        fetch(`${API_BASE_URL}/api/dashboard/stats`),
-        fetch(`${API_BASE_URL}/api/dashboard/stats/chart-data`),
-        fetch(`${API_BASE_URL}/api/dashboard/timeline?hours=${selectedRange.hours}&interval=${selectedRange.interval}`),
-        fetch(`${API_BASE_URL}/api/dashboard/threat-sources`),
+        fetch(`${API_BASE_URL}/api/dashboard/stats${queryPrefix}`),
+        fetch(`${API_BASE_URL}/api/dashboard/stats/chart-data${queryPrefix}`),
+        fetch(`${API_BASE_URL}/api/dashboard/timeline${queryPrefix}${querySeparator}hours=${selectedRange.hours}&interval=${selectedRange.interval}`),
+        fetch(`${API_BASE_URL}/api/dashboard/threat-sources${queryPrefix}`),
       ]);
 
       const statsData = statsRes.status === 'fulfilled' && statsRes.value.ok 
@@ -408,10 +490,66 @@ const Dashboard = () => {
     }, 5000); // Poll every 5 seconds
 
     return () => clearInterval(interval);
-  }, [timelineRange]); // Re-fetch when timeline range changes
+  }, [timelineRange, dateRange]); // Re-fetch when timeline range or date range changes
+
+  // PDF generation function
+  const generatePDF = async () => {
+    try {
+      if (!dashboardRef.current) return;
+
+      // Hide chat and other elements that shouldn't be in PDF
+      const chatElement = document.querySelector('[id^="chat"]');
+      const chatWasVisible = chatElement && chatElement.style.display !== 'none';
+      if (chatElement) chatElement.style.display = 'none';
+
+      // Capture the dashboard content
+      const canvas = await html2canvas(dashboardRef.current, {
+        backgroundColor: '#111827', // gray-900
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        windowWidth: dashboardRef.current.scrollWidth,
+        windowHeight: dashboardRef.current.scrollHeight,
+      });
+
+      // Restore chat visibility
+      if (chatElement && chatWasVisible) chatElement.style.display = '';
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+      const imgScaledWidth = imgWidth * ratio;
+      const imgScaledHeight = imgHeight * ratio;
+
+      // Add title and date range
+      pdf.setFontSize(18);
+      pdf.text('CloudGuard Dashboard', pdfWidth / 2, 15, { align: 'center' });
+      pdf.setFontSize(10);
+      pdf.text(
+        `Date Range: ${dateRange.label || (dateRange.displayFrom + ' to ' + dateRange.displayTo)}`,
+        pdfWidth / 2,
+        22,
+        { align: 'center' }
+      );
+
+      // Add the dashboard image
+      pdf.addImage(imgData, 'PNG', (pdfWidth - imgScaledWidth) / 2, 30, imgScaledWidth, imgScaledHeight);
+
+      // Save PDF
+      const fileName = `cloudguard-dashboard-${dateRange.displayFrom.replace(/\//g, '-')}-to-${dateRange.displayTo.replace(/\//g, '-')}.pdf`;
+      pdf.save(fileName);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Error generating PDF. Please try again.');
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-8 font-inter">
+    <div ref={dashboardRef} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8 font-inter">
       {/* Custom Styles for Glow and Grid Pattern */}
       <style>{`
         .ai-summary-bar {
@@ -464,7 +602,10 @@ const Dashboard = () => {
           <DateRangeFilter onDateRangeChange={setCurrentDateRange} />
 
           {/* Generate PDF Button */}
-          <button className="flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl transition-colors duration-200 shadow-lg shadow-blue-500/30">
+          <button
+            onClick={generatePDF}
+            className="flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl transition-colors duration-200 shadow-lg shadow-blue-500/30"
+          >
             <Download className="w-4 h-4 mr-2" />
             Generate PDF
           </button>
@@ -574,6 +715,54 @@ const Dashboard = () => {
           </ResponsiveContainer>
         </Card>
       </section>
+
+      {/* Custom Date Range Modal */}
+      {showCustomModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold text-white mb-4">Custom Date Range</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">From Date</label>
+                <input
+                  type="date"
+                  value={customFromDate}
+                  onChange={(e) => setCustomFromDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">To Date</label>
+                <input
+                  type="date"
+                  value={customToDate}
+                  onChange={(e) => setCustomToDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleCustomDateSubmit}
+                  disabled={!customFromDate || !customToDate}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  Apply
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCustomModal(false);
+                    setCustomFromDate('');
+                    setCustomToDate('');
+                  }}
+                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- AI Chatbot Interface (Fixed) --- */}
       <Chatbot isChatOpen={isChatOpen} toggleChat={toggleChat} />

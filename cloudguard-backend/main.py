@@ -85,6 +85,37 @@ def get_logs_by_time_range(hours=24):
         traceback.print_exc()
         return []
 
+def get_logs_by_date_range(from_date: str = None, to_date: str = None):
+    """Get logs between from_date and to_date (ISO format strings)"""
+    try:
+        query = (
+            supabase
+            .table("cloudguard_logs")
+            .select("id, srcaddr, region, attack_type, action, confidence, created_at, predicted_label")
+        )
+        
+        if from_date:
+            # Ensure ISO format
+            if "T" not in from_date:
+                from_date = f"{from_date}T00:00:00"
+            query = query.gte("created_at", from_date)
+        
+        if to_date:
+            # Ensure ISO format
+            if "T" not in to_date:
+                to_date = f"{to_date}T23:59:59"
+            query = query.lte("created_at", to_date)
+        
+        response = query.order("created_at", desc=False).execute()
+        
+        print(f"Found {len(response.data) if response.data else 0} logs between {from_date} and {to_date}")
+        return response.data if response.data else []
+    except Exception as e:
+        print(f"DB ERROR in get_logs_by_date_range: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
 def get_all_logs(limit=1000):
     """Get all logs for detailed view"""
     try:
@@ -165,10 +196,19 @@ async def chat(req: ChatRequest):
 # =====================
 
 @app.get("/api/dashboard/stats")
-async def get_dashboard_stats():
-    """Get dashboard statistics: total logs, total attacks, attack percentage, most common attack type"""
+async def get_dashboard_stats(from_date: Optional[str] = None, to_date: Optional[str] = None):
+    """Get dashboard statistics: total logs, total attacks, attack percentage, most common attack type
+    
+    Args:
+        from_date: Start date in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+        to_date: End date in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+    """
     try:
-        logs = get_recent_logs(limit=1000)
+        # Use date range if provided, otherwise use recent logs
+        if from_date or to_date:
+            logs = get_logs_by_date_range(from_date, to_date)
+        else:
+            logs = get_recent_logs(limit=1000)
         
         if not logs:
             return {
@@ -240,18 +280,24 @@ async def get_dashboard_stats():
         }
 
 @app.get("/api/dashboard/timeline")
-async def get_timeline_data(hours: int = 24, interval: str = "hour"):
+async def get_timeline_data(hours: int = 24, interval: str = "hour", from_date: Optional[str] = None, to_date: Optional[str] = None):
     """Get attack timeline data grouped by time interval and severity
     
     Args:
-        hours: Number of hours to look back (default: 24)
+        hours: Number of hours to look back (default: 24) - used if from_date/to_date not provided
         interval: Grouping interval - "hour" or "day" (default: "hour")
+        from_date: Start date in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+        to_date: End date in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
     """
     try:
-        logs_data = get_logs_by_time_range(hours)
+        # Use date range if provided, otherwise use hours
+        if from_date or to_date:
+            logs_data = get_logs_by_date_range(from_date, to_date)
+        else:
+            logs_data = get_logs_by_time_range(hours)
         
         # If no logs in time range, try to get recent logs anyway (last 100)
-        if not logs_data:
+        if not logs_data and not (from_date or to_date):
             print(f"No logs found in last {hours} hours, trying recent logs")
             logs_data = get_recent_logs(limit=100)
         
@@ -387,11 +433,31 @@ async def get_timeline_data(hours: int = 24, interval: str = "hour"):
             return [{"time": (datetime.utcnow() - timedelta(hours=num_hours - 1 - i)).strftime("%H:00"), "HIGH_SEVERITY": 0, "MEDIUM_SEVERITY": 0, "LOW_SEVERITY": 0} for i in range(num_hours)]
 
 @app.get("/api/dashboard/threat-sources")
-async def get_threat_sources():
-    """Get top threat sources by count"""
+async def get_threat_sources(from_date: Optional[str] = None, to_date: Optional[str] = None):
+    """Get top threat sources by count
+    
+    Args:
+        from_date: Start date in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+        to_date: End date in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+    """
     try:
-        logs = get_recent_logs(limit=1000)
-        attacks = [log for log in logs if log.get("attack_type", "").lower() != "benign"]
+        # Use date range if provided, otherwise use recent logs
+        if from_date or to_date:
+            logs = get_logs_by_date_range(from_date, to_date)
+        else:
+            logs = get_recent_logs(limit=1000)
+        
+        # Helper function to check if log is an attack (predicted_label != 0)
+        def is_attack(log):
+            predicted_label = log.get("predicted_label")
+            if predicted_label is None:
+                return False
+            try:
+                return int(predicted_label) != 0
+            except (ValueError, TypeError):
+                return False
+        
+        attacks = [log for log in logs if is_attack(log)]
         
         if not attacks:
             return []
@@ -429,10 +495,19 @@ async def get_threat_sources():
         return []
 
 @app.get("/api/dashboard/stats/chart-data")
-async def get_stats_chart_data():
-    """Get mini chart data for stat cards (last 7 data points)"""
+async def get_stats_chart_data(from_date: Optional[str] = None, to_date: Optional[str] = None):
+    """Get mini chart data for stat cards (last 7 data points)
+    
+    Args:
+        from_date: Start date in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+        to_date: End date in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+    """
     try:
-        logs = get_recent_logs(limit=1000)
+        # Use date range if provided, otherwise use recent logs
+        if from_date or to_date:
+            logs = get_logs_by_date_range(from_date, to_date)
+        else:
+            logs = get_recent_logs(limit=1000)
         
         if not logs:
             return {
@@ -446,6 +521,16 @@ async def get_stats_chart_data():
         segment_size = len(logs) // 7
         if segment_size == 0:
             segment_size = 1
+        
+        # Helper function to check if log is an attack (predicted_label != 0)
+        def is_attack(log):
+            predicted_label = log.get("predicted_label")
+            if predicted_label is None:
+                return False
+            try:
+                return int(predicted_label) != 0
+            except (ValueError, TypeError):
+                return False
         
         total_attacks_data = []
         active_threats_data = []
@@ -464,7 +549,7 @@ async def get_stats_chart_data():
                 uptime_data.append(100)
                 continue
             
-            attacks = [log for log in segment if log.get("attack_type", "").lower() != "benign"]
+            attacks = [log for log in segment if is_attack(log)]
             total_attacks_data.append(len(attacks))
             
             threats_pct = (len(attacks) / len(segment) * 100) if segment else 0
