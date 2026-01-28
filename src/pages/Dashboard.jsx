@@ -3,8 +3,9 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell,
 } from 'recharts';
 import {
-  Calendar, ChevronDown, Download, AlertTriangle, ArrowRight, TrendingUp, Cpu, MessageSquare, Send, X, Clock, Database, Percent, Shield,
+  ChevronDown, Download, AlertTriangle, ArrowRight, TrendingUp, Cpu, MessageSquare, Send, X, Clock, Database, Percent, Shield,
 } from 'lucide-react';
+import DateRangeFilter from '../components/DateRangeFilter';
 
 // --- API Configuration ---
 const API_BASE_URL = 'http://127.0.0.1:8000';
@@ -202,8 +203,7 @@ const Chatbot = ({ isChatOpen, toggleChat }) => {
 // --- Dashboard Component ---
 
 const Dashboard = () => {
-  const [startDate, setStartDate] = useState('19-09-2025');
-  const [endDate, setEndDate] = useState('26-09-2025');
+  const [currentDateRange, setCurrentDateRange] = useState({ from: '', to: '' });
   const [isChatOpen, setIsChatOpen] = useState(false);
   
   // State for real-time data - 4 KPIs: Total Logs, Total Attacks Detected, Attack % of Traffic, Most Common Attack Type
@@ -460,16 +460,8 @@ const Dashboard = () => {
         <h1 className="text-3xl font-bold text-white mb-4 md:mb-0">CloudGuard Dashboard</h1>
         <div className="flex flex-wrap items-center space-x-2 sm:space-x-4">
           
-          {/* Date Picker Group */}
-          <div className="flex items-center bg-gray-800/70 p-2 rounded-xl text-sm border border-gray-700">
-            <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-            <span className="mr-1 text-gray-300">FROM</span>
-            <span className="font-semibold text-white">{startDate}</span>
-            <ArrowRight className="w-3 h-3 mx-2 text-gray-400" />
-            <span className="mr-1 text-gray-300">TO</span>
-            <span className="font-semibold text-white">{endDate}</span>
-            <ChevronDown className="w-4 h-4 ml-2 text-gray-400 cursor-pointer" />
-          </div>
+          {/* Date Range Filter Dropdown */}
+          <DateRangeFilter onDateRangeChange={setCurrentDateRange} />
 
           {/* Generate PDF Button */}
           <button className="flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl transition-colors duration-200 shadow-lg shadow-blue-500/30">

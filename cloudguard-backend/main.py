@@ -132,7 +132,7 @@ async def chat(req: ChatRequest):
                     f"🛑 Attack Type: **{log['attack_type']}**\n"
                     f"📡 Source IP: `{log['srcaddr']}`\n"
                     f"🌍 Region: {log['region']}\n"
-                    f"🛡️ Action: **{log['action']}**\n"
+                    
                     f"🕒 Time: {log['created_at']}"
                 )
                 return ChatResponse(answer=reply)
