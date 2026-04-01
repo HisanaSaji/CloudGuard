@@ -109,7 +109,7 @@ export default function LandingPage() {
       {/* Unified Background Wrapper - Shared for all sections */}
       <div className="landing-page-background">
         {/* Background: Radial Gradient */}
-        <div 
+        <div
           className="absolute inset-0 z-0"
           style={{
             background: 'radial-gradient(ellipse at center, #1a1f35 0%, #0a0e1a 40%, #030712 100%)',
@@ -139,14 +139,14 @@ export default function LandingPage() {
       </div>
 
       {/* Section Wrapper with Subtle Perspective */}
-      <div 
+      <div
         className="relative z-10"
         style={{
           perspective: '1500px',
         }}
       >
         {/* Hero Section */}
-        <section 
+        <section
           className="relative overflow-hidden min-h-screen section-perspective hero-fade-in"
           style={{
             transformStyle: 'preserve-3d',
@@ -166,7 +166,7 @@ export default function LandingPage() {
             <div className="text-center max-w-6xl mb-8">
               <h1 className="text-5xl sm:text-6xl md:text-8xl lg:text-9xl font-black tracking-tighter leading-none hero-slide-up md:whitespace-nowrap" style={{ letterSpacing: '-0.02em' }}>
                 <span className="text-white">Cloud</span>
-                <span 
+                <span
                   className="text-transparent bg-clip-text bg-gradient-to-r"
                   style={{
                     backgroundImage: 'linear-gradient(to right, #3b82f6 0%, #06b6d4 100%)',
@@ -184,7 +184,7 @@ export default function LandingPage() {
             </p>
 
             {/* CTA Button */}
-            <a href="/dashboard">
+            <a href="/login">
               <button
                 className="px-10 md:px-12 py-3 h-auto rounded-xl font-semibold tracking-wide
                            bg-transparent border transition-all duration-300 ease-out
@@ -214,7 +214,7 @@ export default function LandingPage() {
         </section>
 
         {/* Platform Capabilities Section */}
-        <section 
+        <section
           className="relative overflow-hidden section-perspective"
           style={{
             transformStyle: 'preserve-3d',
@@ -228,7 +228,7 @@ export default function LandingPage() {
         </section>
 
         {/* Operational Approach Section */}
-        <section 
+        <section
           className="relative overflow-hidden section-perspective"
           style={{
             transformStyle: 'preserve-3d',
@@ -242,19 +242,21 @@ export default function LandingPage() {
         </section>
 
         {/* Team Section */}
-        <section 
-          className="relative overflow-hidden section-perspective"
+        <section
+          className="relative overflow-hidden section-perspective flex items-center justify-center pt-24 pb-24 md:pt-32 md:pb-32"
           style={{
             transformStyle: 'preserve-3d',
             transform: `rotateX(${perspectiveAmount}deg)`,
             transition: 'transform 0.3s ease-out',
+            minHeight: '50vh',
           }}
         >
-          <div className="relative z-10 py-20 md:py-32 px-4 text-white">
-            <div className="relative z-20 max-w-6xl mx-auto w-full">
-              {/* Heading with gradient text */}
-              <div className="mt-32 mb-16 text-center">
-                <h2 
+          {/* Shift block up for optical centering */}
+          <div className="relative z-10 px-4 text-white w-full transform -translate-y-3 md:-translate-y-6">
+            <div className="relative z-20 max-w-5xl mx-auto w-full flex flex-col items-center justify-center">
+              {/* Heading with gradient text - tighter grouping to feel like single block */}
+              <div className="mb-10 md:mb-12 text-center w-full">
+                <h2
                   className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter leading-tight"
                   style={{
                     backgroundImage: 'linear-gradient(to right, #ffffff 0%, #89d4ff 50%, #3b82f6 100%)',
@@ -269,9 +271,9 @@ export default function LandingPage() {
               </div>
 
               {/* Team member cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
-                <div 
-                  className="p-6 md:p-8 rounded-xl md:rounded-2xl transition-all duration-300 cursor-default group"
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 w-full max-w-5xl mx-auto">
+                <div
+                  className="flex flex-col items-center justify-center text-center p-6 md:p-8 rounded-xl md:rounded-2xl transition-all duration-300 cursor-default group w-full"
                   style={{
                     backgroundColor: 'rgba(15, 25, 45, 0.6)',
                     backdropFilter: 'blur(12px)',
@@ -289,14 +291,14 @@ export default function LandingPage() {
                     e.currentTarget.style.boxShadow = '0 0 40px rgba(30, 120, 255, 0.05)';
                   }}
                 >
-                  <div className="text-4xl md:text-5xl mb-4"></div>
-                  <h3 className="text-lg md:text-xl font-semibold text-white">
+                  <div className="text-4xl md:text-5xl"></div>
+                  <h3 className="text-lg md:text-xl font-semibold text-white transform -translate-y-1">
                     Hisana Saji
                   </h3>
                 </div>
 
-                <div 
-                  className="p-6 md:p-8 rounded-xl md:rounded-2xl transition-all duration-300 cursor-default group"
+                <div
+                  className="flex flex-col items-center justify-center text-center p-6 md:p-8 rounded-xl md:rounded-2xl transition-all duration-300 cursor-default group w-full"
                   style={{
                     backgroundColor: 'rgba(15, 25, 45, 0.6)',
                     backdropFilter: 'blur(12px)',
@@ -314,14 +316,14 @@ export default function LandingPage() {
                     e.currentTarget.style.boxShadow = '0 0 40px rgba(30, 120, 255, 0.05)';
                   }}
                 >
-                  <div className="text-4xl md:text-5xl mb-4"></div>
-                  <h3 className="text-lg md:text-xl font-semibold text-white">
+                  <div className="text-4xl md:text-5xl"></div>
+                  <h3 className="text-lg md:text-xl font-semibold text-white transform -translate-y-1">
                     Binny Thomas
                   </h3>
                 </div>
 
-                <div 
-                  className="p-6 md:p-8 rounded-xl md:rounded-2xl transition-all duration-300 cursor-default group"
+                <div
+                  className="flex flex-col items-center justify-center text-center p-6 md:p-8 rounded-xl md:rounded-2xl transition-all duration-300 cursor-default group w-full"
                   style={{
                     backgroundColor: 'rgba(15, 25, 45, 0.6)',
                     backdropFilter: 'blur(12px)',
@@ -339,14 +341,14 @@ export default function LandingPage() {
                     e.currentTarget.style.boxShadow = '0 0 40px rgba(30, 120, 255, 0.05)';
                   }}
                 >
-                  <div className="text-4xl md:text-5xl mb-4"></div>
-                  <h3 className="text-lg md:text-xl font-semibold text-white">
+                  <div className="text-4xl md:text-5xl"></div>
+                  <h3 className="text-lg md:text-xl font-semibold text-white transform -translate-y-1">
                     Bhavya Shivani H
                   </h3>
                 </div>
 
-                <div 
-                  className="p-6 md:p-8 rounded-xl md:rounded-2xl transition-all duration-300 cursor-default group"
+                <div
+                  className="flex flex-col items-center justify-center text-center p-6 md:p-8 rounded-xl md:rounded-2xl transition-all duration-300 cursor-default group w-full"
                   style={{
                     backgroundColor: 'rgba(15, 25, 45, 0.6)',
                     backdropFilter: 'blur(12px)',
@@ -364,8 +366,8 @@ export default function LandingPage() {
                     e.currentTarget.style.boxShadow = '0 0 40px rgba(30, 120, 255, 0.05)';
                   }}
                 >
-                  <div className="text-4xl md:text-5xl mb-4"></div>
-                  <h3 className="text-lg md:text-xl font-semibold text-white">
+                  <div className="text-4xl md:text-5xl"></div>
+                  <h3 className="text-lg md:text-xl font-semibold text-white transform -translate-y-1">
                     Siva H S
                   </h3>
                 </div>

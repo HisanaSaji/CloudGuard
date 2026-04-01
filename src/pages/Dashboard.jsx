@@ -1,20 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Brush, ResponsiveContainer, BarChart, Bar, Cell,
 } from 'recharts';
 import {
-  Calendar, ChevronDown, Download, AlertTriangle, ArrowRight, TrendingUp, Cpu, MessageSquare, Send, X, Clock, Database, Percent, Shield, MapPin, Globe
+  Calendar, ChevronDown, Download, AlertTriangle, ArrowRight, TrendingUp, Cpu, MessageSquare, Send, X, Clock, Database, Percent, Shield, MapPin, Globe, LogOut
 } from 'lucide-react';
 import { ComposableMap, Geographies, Geography, Marker, Line as RSMLine, ZoomableGroup, Graticule } from "react-simple-maps";
+import { useNavigate } from 'react-router-dom';
+import { signOut } from 'firebase/auth';
+import { auth } from '../firebase';
 
 // --- API Configuration ---
 const API_BASE_URL = 'http://127.0.0.1:8000';
 
 // Mock Chat History (now with stable ids)
 const initialChatHistory = [
-  { type: 'bot',
+  {
+    type: 'bot',
     text: ' Hi! I’m CloudGuard AI. Ask me about recent attacks, traffic, or security activity.'
-  }  
+  }
 ];
 
 // --- Custom Components ---
@@ -203,10 +207,11 @@ const Chatbot = ({ isChatOpen, toggleChat }) => {
 // --- Dashboard Component ---
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [startDate, setStartDate] = useState('19-09-2025');
   const [endDate, setEndDate] = useState('26-09-2025');
   const [isChatOpen, setIsChatOpen] = useState(false);
-  
+
   // State for real-time data - 4 KPIs: Total Logs, Total Attacks Detected, Attack % of Traffic, Most Common Attack Type
   const [stats, setStats] = useState([
     {
@@ -254,7 +259,7 @@ const Dashboard = () => {
       chartColor: "#10b981",
     },
   ]);
-  
+
   const [timelineData, setTimelineData] = useState([]);
   const [threatSourceData, setThreatSourceData] = useState([]);
   const [locationData, setLocationData] = useState([]);
@@ -270,12 +275,25 @@ const Dashboard = () => {
   // CSV column selection state
   const [showColumnSelector, setShowColumnSelector] = useState(false);
   const csvColumns = [
-    'created_at', 'srcport', 'dstport', 'protocol', 'packets', 'bytes', 
-    'start', 'end', 'tcp_flags', 'predicted_label', 'confidence', 'id', 
-    'srcaddr', 'dstaddr', 'pkt_srcaddr', 'pkt_dstaddr', 'region', 
+    'created_at', 'srcport', 'dstport', 'protocol', 'packets', 'bytes',
+    'start', 'end', 'tcp_flags', 'predicted_label', 'confidence', 'id',
+    'srcaddr', 'dstaddr', 'pkt_srcaddr', 'pkt_dstaddr', 'region',
     'flow_direction', 'traffic_path', 'interface_id', 'log_status', 'action', 'attack_type', 'datacenter'
   ];
   const [selectedColumns, setSelectedColumns] = useState(new Set(csvColumns));
+
+  // Map state
+  const [tooltipData, setTooltipData] = useState(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const [mapPosition, setMapPosition] = useState({
+    coordinates: [50, 20],
+    zoom: 1.3
+  });
+  const DESTINATION_SERVER = [72.8, 19.0];
+
+  const animateMapTo = (center, zoom) => {
+    setMapPosition({ coordinates: center, zoom });
+  };
 
   const toggleChat = () => setIsChatOpen(prev => !prev);
 
@@ -363,11 +381,11 @@ const Dashboard = () => {
   const getDateRangeFromHours = (hours) => {
     const toDate = new Date();
     const fromDate = new Date(toDate.getTime() - hours * 60 * 60 * 1000);
-    
+
     // Format as ISO 8601 UTC
     const from = fromDate.toISOString();
     const to = toDate.toISOString();
-    
+
     return { from_date: from, to_date: to };
   };
 
@@ -456,7 +474,7 @@ const Dashboard = () => {
           // Parse date string (YYYY-MM-DD) as UTC
           const [fromYear, fromMonth, fromDay] = customFromDate.split('-').map(Number);
           const [toYear, toMonth, toDay] = customToDate.split('-').map(Number);
-          
+
           fromDate = new Date(Date.UTC(fromYear, fromMonth - 1, fromDay, 0, 0, 0, 0));
           toDate = new Date(Date.UTC(toYear, toMonth - 1, toDay, 23, 59, 59, 999));
         } else {
@@ -499,15 +517,15 @@ const Dashboard = () => {
       const currentRange = computeDateRange(selectedRange, customFromDate, customToDate);
       const fromDate = currentRange.fromDateISO;
       const toDate = currentRange.toDateISO;
-      
+
       // Determine interval based on selected date range (top dropdown)
       const interval = getIntervalForDateRange(selectedRange);
-      
+
       // DEBUG: Log system time and date range
       const now = new Date();
       const todayDateString = now.toDateString(); // e.g., "Wed Mar 18 2026"
       const todayDateStringUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toDateString();
-      
+
       console.log('\n🕐 [Dashboard] System Time & Date Range:');
       console.log(`   Local time: ${now.toString()}`);
       console.log(`   UTC time: ${now.toUTCString()}`);
@@ -518,7 +536,7 @@ const Dashboard = () => {
       console.log(`   API from_date: ${fromDate}`);
       console.log(`   API to_date: ${toDate}`);
       console.log(`   Chart interval: ${interval}`);
-      
+
       // Fetch stats and chart data in parallel
       const [statsRes, chartDataRes, timelineRes, threatRes, locationRes] = await Promise.allSettled([
         fetch(`${API_BASE_URL}/api/dashboard/stats?from_date=${encodeURIComponent(fromDate)}&to_date=${encodeURIComponent(toDate)}`),
@@ -528,26 +546,26 @@ const Dashboard = () => {
         fetch(`${API_BASE_URL}/api/dashboard/locations?from_date=${encodeURIComponent(fromDate)}&to_date=${encodeURIComponent(toDate)}`),
       ]);
 
-      const statsData = statsRes.status === 'fulfilled' && statsRes.value.ok 
-        ? await statsRes.value.json() 
+      const statsData = statsRes.status === 'fulfilled' && statsRes.value.ok
+        ? await statsRes.value.json()
         : { total_logs: 0, total_attacks: 0, attack_percentage: 0, most_common_attack_type: "None", total_attacks_change: 0 };
-      
+
       const chartData = chartDataRes.status === 'fulfilled' && chartDataRes.value.ok
         ? await chartDataRes.value.json()
         : { total_attacks: [0, 0, 0, 0, 0, 0, 0], active_threats: [0, 0, 0, 0, 0, 0, 0], active_alerts: [0, 0, 0, 0, 0, 0, 0], uptime: [100, 100, 100, 100, 100, 100, 100] };
-      
+
       const timelineDataRes = timelineRes.status === 'fulfilled' && timelineRes.value.ok
         ? await timelineRes.value.json()
         : [];
-      
+
       const threatData = threatRes.status === 'fulfilled' && threatRes.value.ok
         ? await threatRes.value.json()
         : [];
-      
+
       const locationDataRes = locationRes.status === 'fulfilled' && locationRes.value.ok
         ? await locationRes.value.json()
         : [];
-      
+
       // DEBUG: Log raw API responses
       console.log('\n📊 [Dashboard] Raw API Responses:');
       console.log(`   Stats - total_logs: ${statsData.total_logs}, total_attacks: ${statsData.total_attacks}`);
@@ -601,8 +619,8 @@ const Dashboard = () => {
           },
           {
             title: "Most Common Attack Type",
-            value: statsData.most_common_attack_type && statsData.most_common_attack_type !== "None" 
-              ? statsData.most_common_attack_type.length > 12 
+            value: statsData.most_common_attack_type && statsData.most_common_attack_type !== "None"
+              ? statsData.most_common_attack_type.length > 12
                 ? statsData.most_common_attack_type.substring(0, 12) + "..."
                 : statsData.most_common_attack_type
               : "None",
@@ -623,7 +641,7 @@ const Dashboard = () => {
       if (timelineDataRes && Array.isArray(timelineDataRes) && timelineDataRes.length > 0) {
         // Check if any buckets have non-zero data
         const hasData = timelineDataRes.some(d => d.HIGH_SEVERITY > 0 || d.MEDIUM_SEVERITY > 0 || d.LOW_SEVERITY > 0);
-        
+
         if (hasData) {
           console.log("\n✅ [Timeline] Data with attacks received:", timelineDataRes.length, 'data points');
           console.log("📈 Sample row:", timelineDataRes[0]);
@@ -634,27 +652,27 @@ const Dashboard = () => {
           console.warn('\n⚠️ [Timeline] Received buckets but all have zero attacks');
           console.log('First bucket:', timelineDataRes[0]);
           console.log('Last bucket:', timelineDataRes[timelineDataRes.length - 1]);
-          
+
           // If "Today" has no data but we got empty buckets, check if we should suggest expanding date range
           if (selectedRange === 'today') {
             console.warn('⚠️ No attacks detected for TODAY. Consider trying "Last 7 Days".');
           }
-          
+
           setTimelineData(prev => JSON.stringify(prev) === JSON.stringify(timelineDataRes) ? prev : timelineDataRes); // Set the empty buckets so chart shows the full timeline
         }
       } else {
         // Fallback: create empty timeline based on selected date range
         const interval = getIntervalForDateRange(selectedRange);
         let emptyTimeline = [];
-        
+
         console.warn('\n⚠️ [Timeline] No buckets received from backend for range:', selectedRange);
-        
+
         if (interval === 'day') {
           // For daily intervals, generate empty days
           const fromDate = new Date(computedDateRange.fromDateISO);
           const toDate = new Date(computedDateRange.toDateISO);
           const numDays = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
-          
+
           emptyTimeline = Array.from({ length: numDays }, (_, i) => {
             const date = new Date(fromDate);
             date.setDate(date.getDate() + i);
@@ -679,11 +697,11 @@ const Dashboard = () => {
             };
           });
         }
-        
+
         setTimelineData(prev => JSON.stringify(prev) === JSON.stringify(emptyTimeline) ? prev : emptyTimeline);
         console.log('ℹ️ Using empty timeline fallback with', emptyTimeline.length, 'buckets');
       }
-      
+
       // Handle threat source data
       if (threatData && Array.isArray(threatData) && threatData.length > 0) {
         console.log("\n✅ [Threats] Data received:", threatData.length, 'source IPs');
@@ -691,17 +709,17 @@ const Dashboard = () => {
         setThreatSourceData(prev => JSON.stringify(prev) === JSON.stringify(threatData) ? prev : threatData);
       } else {
         console.warn('\n⚠️ [Threats] No data received from backend');
-        
+
         // Helpful message for "Today" with no threats
         if (selectedRange === 'today') {
           console.warn('ℹ️ No attack sources detected for TODAY. Try "Last 7 Days" for more data.');
         }
-        
+
         setThreatSourceData(prev => JSON.stringify(prev) === JSON.stringify([]) ? prev : []);
       }
-      
+
       setLocationData(prev => JSON.stringify(prev) === JSON.stringify(locationDataRes) ? prev : locationDataRes);
-      
+
       setIsLoading(false);
     } catch (error) {
       console.error('\n❌ Error fetching dashboard data:', error);
@@ -711,7 +729,7 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    fetchDashboardData(); 
+    fetchDashboardData();
 
     // Auto-refresh the dashboard every 5 seconds
     const interval = setInterval(() => {
@@ -719,7 +737,7 @@ const Dashboard = () => {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [computedDateRange, selectedRange]); 
+  }, [computedDateRange, selectedRange]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-8 font-inter">
@@ -770,7 +788,23 @@ const Dashboard = () => {
       <header className="flex flex-col md:flex-row justify-between items-center mb-8 pb-4 border-b border-gray-800">
         <h1 className="text-3xl font-bold text-white mb-4 md:mb-0">CloudGuard Dashboard</h1>
         <div className="flex flex-wrap items-center space-x-2 sm:space-x-4">
-          
+
+          {/* Logout Button */}
+          <button
+            onClick={async () => {
+              try {
+                await signOut(auth);
+                navigate('/');
+              } catch (error) {
+                console.error("Error signing out:", error);
+              }
+            }}
+            className="flex items-center text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 p-3 rounded-xl text-sm border border-red-500/20 transition-colors duration-200"
+            title="Logout"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+
           {/* Date Range Selector Dropdown */}
           <div className="relative">
             <button
@@ -789,9 +823,8 @@ const Dashboard = () => {
                   <button
                     key={option.value}
                     onClick={() => handleRangeSelect(option.value)}
-                    className={`w-full text-left px-4 py-3 hover:bg-gray-700 transition-colors ${
-                      selectedRange === option.value ? 'bg-blue-600/30 text-blue-300' : 'text-gray-300'
-                    } ${option.value === 'custom' && 'border-t border-gray-600'}`}
+                    className={`w-full text-left px-4 py-3 hover:bg-gray-700 transition-colors ${selectedRange === option.value ? 'bg-blue-600/30 text-blue-300' : 'text-gray-300'
+                      } ${option.value === 'custom' && 'border-t border-gray-600'}`}
                   >
                     {option.label}
                   </button>
@@ -801,7 +834,7 @@ const Dashboard = () => {
           </div>
 
           {/* Generate PDF Button */}
-          <button 
+          <button
             onClick={handleExportCSV}
             className="flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl transition-colors duration-200 shadow-lg shadow-blue-500/30"
           >
@@ -859,7 +892,7 @@ const Dashboard = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-lg p-8 max-w-md w-full border border-gray-700 shadow-2xl">
             <h2 className="text-2xl font-bold text-white mb-6">Custom Date Range</h2>
-            
+
             <div className="space-y-4">
               {/* From Date Input */}
               <div>
@@ -918,7 +951,7 @@ const Dashboard = () => {
         <Card className="h-[450px] flex flex-col">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold">Attack Timeline</h2>
-    
+
           </div>
           <div className="flex justify-center space-x-4 text-xs mb-4">
             <span className="flex items-center text-red-400"><div className="w-3 h-3 mr-1 rounded-full bg-red-400"></div>HIGH SEVERITY</span>
@@ -930,10 +963,10 @@ const Dashboard = () => {
               {timelineData.length > 0 ? (
                 <LineChart
                   data={timelineData}
-                  margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+                  margin={{ top: 5, right: 20, left: 10, bottom: 20 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis 
+                  <XAxis
                     dataKey="time"
                     stroke="#9ca3af"
                     tick={{ fontSize: 10 }}
@@ -948,20 +981,28 @@ const Dashboard = () => {
                       }
                       return value;
                     }}
-                    />
-                  <YAxis  
-                          stroke="#9ca3af"
-                          tick={{ fontSize: 10 }}
-                          domain={[0, 'auto']}
-                          tickCount={5} 
-                          />
+                  />
+                  <YAxis
+                    stroke="#9ca3af"
+                    tick={{ fontSize: 10 }}
+                    domain={[0, 'auto']}
+                    tickCount={5}
+                  />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #4b5563', borderRadius: '0.5rem' }}
                     labelStyle={{ color: '#ffffff' }}
                   />
-                  <Line type="monotone" dataKey="HIGH_SEVERITY" stroke="#ef4444" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="MEDIUM_SEVERITY" stroke="#f59e0b" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="LOW_SEVERITY" stroke="#10b981" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="HIGH_SEVERITY" stroke="#ef4444" strokeWidth={2} activeDot={{ r: 8 }} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="MEDIUM_SEVERITY" stroke="#f59e0b" strokeWidth={2} activeDot={{ r: 8 }} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="LOW_SEVERITY" stroke="#10b981" strokeWidth={2} activeDot={{ r: 8 }} dot={{ r: 3 }} />
+
+                  <Brush
+                    dataKey="time"
+                    height={30}
+                    stroke="#3b82f6"
+                    fill="#1f2937"
+                    tickFormatter={() => ''}
+                  />
                 </LineChart>
               ) : (
                 <div className="flex flex-col items-center justify-center text-center">
@@ -975,8 +1016,8 @@ const Dashboard = () => {
                       <AlertTriangle className="w-8 h-8 text-gray-500 mx-auto mb-2" />
                       <div className="text-gray-400 font-semibold">No attack data</div>
                       <div className="text-xs text-gray-600 mt-3 max-w-xs">
-                        {selectedRange === 'today' 
-                          ? '📋 No attacks detected today. Simulator may not have recent data. Try "Last 7 Days" or check backend logs.' 
+                        {selectedRange === 'today'
+                          ? '📋 No attacks detected today. Simulator may not have recent data. Try "Last 7 Days" or check backend logs.'
                           : '📋 No attacks in selected range. Try expanding the date range.'}
                       </div>
                       <div className="text-xs text-gray-700 mt-2 p-2 bg-gray-800 rounded">
@@ -1004,7 +1045,7 @@ const Dashboard = () => {
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
                   <XAxis type="number" stroke="#9ca3af" tick={{ fontSize: 10 }} />
                   <YAxis type="category" dataKey="name" stroke="#9ca3af" tick={{ fontSize: 10 }} width={120} />
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #4b5563', borderRadius: '0.5rem' }}
                     labelStyle={{ color: '#ffffff' }}
                   />
@@ -1026,8 +1067,8 @@ const Dashboard = () => {
                       <Shield className="w-8 h-8 text-gray-500 mx-auto mb-2" />
                       <div className="text-gray-400 font-semibold">No threats detected</div>
                       <div className="text-xs text-gray-600 mt-3 max-w-xs">
-                        {selectedRange === 'today' 
-                          ? '🛡️ No attack sources today. Simulator may not have recent data. Try "Last 7 Days" or check backend logs.' 
+                        {selectedRange === 'today'
+                          ? '🛡️ No attack sources today. Simulator may not have recent data. Try "Last 7 Days" or check backend logs.'
                           : '🛡️ No attacks in selected range. Try expanding the date range.'}
                       </div>
                       <div className="text-xs text-gray-700 mt-2 p-2 bg-gray-800 rounded">
@@ -1044,7 +1085,7 @@ const Dashboard = () => {
 
       {/* --- Map and Demographics Section --- */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-20">
-        
+
         {/* Demographics / Access Locations */}
         <Card className="flex flex-col h-[450px]">
           <h2 className="text-xl font-bold mb-6 flex items-center">
@@ -1086,14 +1127,58 @@ const Dashboard = () => {
         </Card>
 
         {/* Attack Map */}
-        <Card className="lg:col-span-2 flex flex-col h-[450px] relative overflow-hidden">
-          <h2 className="text-xl font-bold mb-2 flex items-center z-10">
-            <MapPin className="w-5 h-5 mr-2 text-red-500" />
-            Global Threat Map
-          </h2>
-          <div className="absolute inset-0 pt-12 flex items-center justify-center bg-gray-900 border-t border-blue-900/30">
-            <ComposableMap projection="geoMercator" projectionConfig={{ scale: 130 }} className="opacity-90">
-              <ZoomableGroup center={[20, 20]} zoom={1} minZoom={1} maxZoom={8}>
+        <Card
+          className="lg:col-span-2 flex flex-col h-[450px] relative overflow-hidden custom-p-0"
+          style={{ padding: 0 }}
+        >
+          <style>{`
+            @keyframes moving-dash {
+              to {
+                stroke-dashoffset: -16;
+              }
+            }
+          `}</style>
+
+          <div className="absolute z-20 top-4 left-6 pointer-events-auto">
+            <h2 className="text-xl font-bold flex items-center">
+              <MapPin className="w-5 h-5 mr-2 text-red-500" />
+              Global Threat Map
+            </h2>
+          </div>
+
+          <div className="absolute z-20 top-4 right-4 flex space-x-2 pointer-events-auto">
+            <button
+              onClick={() => animateMapTo([20, 20], 1.2)}
+              className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-1 rounded text-xs z-10"
+            >
+              Reset Zoom
+            </button>
+          </div>
+
+          <div className="absolute inset-0 pt-12 w-full h-full flex items-center justify-center">
+            <div className="absolute inset-0 bg-gradient-to-t from-blue-900/40 via-transparent to-transparent pointer-events-none"></div>
+            <ComposableMap
+              projection="geoMercator"
+              projectionConfig={{ scale: 190 }}
+              width={800}
+              height={450}
+              className="w-full h-full"
+            >
+              <ZoomableGroup
+                zoom={mapPosition.zoom}
+                center={mapPosition.coordinates}
+                onMoveEnd={({ coordinates, zoom }) => {
+                  if (!coordinates || !Array.isArray(coordinates)) return;
+                  if (coordinates.length !== 2) return;
+
+                  setMapPosition({
+                    coordinates: [coordinates[0], coordinates[1]],
+                    zoom: zoom
+                  });
+                }}
+                minZoom={1}
+                maxZoom={8}
+              >
                 <Graticule stroke="#1e293b" strokeWidth={0.5} />
                 <Geographies geography="https://unpkg.com/world-atlas@2.0.2/countries-110m.json">
                   {({ geographies }) =>
@@ -1102,72 +1187,130 @@ const Dashboard = () => {
                         key={geo.rsmKey}
                         geography={geo}
                         fill="#020617"
-                        stroke="#3b82f6"
-                        strokeWidth={0.5}
+                        stroke="#2563eb"
+                        strokeWidth={0.6}
                         style={{
                           default: { outline: "none" },
                           hover: { fill: "#1e293b", stroke: "#60a5fa", outline: "none", transition: "all 250ms" },
                           pressed: { outline: "none" },
                         }}
+                        onMouseEnter={(e) => {
+                          setTooltipData({ name: geo.properties.name });
+                          setTooltipPosition({ x: e.clientX, y: e.clientY });
+                        }}
+                        onMouseMove={(e) => {
+                          setTooltipPosition({ x: e.clientX, y: e.clientY });
+                        }}
+                        onMouseLeave={() => setTooltipData(null)}
                       />
                     ))
                   }
                 </Geographies>
-                
-                {/* Dest (ap-south-1 / Mumbai) Marker */}
-                <Marker coordinates={[72.8, 19.0]}>
-                  <circle r={5} fill="#06b6d4" />
-                  <circle r={12} fill="#06b6d4" opacity={0.4} className="animate-ping" />
-                  <text y={-10} x={10} fill="#06b6d4" fontSize={8} fontWeight="bold" className="shadow-lg">AP-SOUTH-1 Server</text>
+
+                {/* Destination Server Node */}
+                <Marker coordinates={DESTINATION_SERVER}>
+                  <circle r={6} fill="#06b6d4" />
+                  <circle r={18} fill="#06b6d4" opacity={0.3} className="animate-ping" />
+                  <circle r={28} fill="#06b6d4" opacity={0.1} />
+                  <text y={-10} x={10} fill="#94a3b8" fontSize={7} fontWeight="bold" className="shadow-lg">
+                    AP-SOUTH-1 Server
+                  </text>
                 </Marker>
-                
+
                 {/* Origin Markers and Arcs */}
                 {locationData.map((loc, idx) => {
-                  if (!loc.coordinates || (loc.coordinates[0] === 0 && loc.coordinates[1] === 0)) return null;
+                  if (
+                    !loc.coordinates ||
+                    !Array.isArray(loc.coordinates) ||
+                    loc.coordinates.length !== 2
+                  ) return null;
+
+                  const isDest = loc.coordinates[0] === DESTINATION_SERVER[0] && loc.coordinates[1] === DESTINATION_SERVER[1];
+
+                  // Dynamic offsets relative to coordinates
+                  const deterministicOffset = ((Math.abs(loc.coordinates[0] + loc.coordinates[1]) % 3) + 1) * 0.8;
+                  const offset = isDest ? 0 : deterministicOffset;
                   
-                  // Don't draw an arc from Mumbai to Mumbai
-                  const isIndia = loc.coordinates[0] === 79.0 && loc.coordinates[1] === 20.6;
-                  
+                  const countryName = loc.country || loc.name || loc.region || "Unknown";
+
                   const draws = [];
                   if (loc.benign > 0) {
-                    draws.push({ isAttack: false, color: "#10b981", offset: isIndia ? 0 : 2 });
+                    draws.push({ isAttack: false, color: "#10b981", offset: offset });
                   }
                   if (loc.attack > 0) {
-                    draws.push({ isAttack: true, color: "#ef4444", offset: isIndia ? 0 : -2 });
+                    draws.push({ isAttack: true, color: "#ef4444", offset: -offset });
                   }
 
                   return (
                     <g key={`loc-${idx}`}>
-                      <Marker coordinates={loc.coordinates}>
-                        <circle r={3} fill={loc.attack > 0 ? "#ef4444" : "#10b981"} />
-                        <text y={-8} x={5} fill="#9ca3af" fontSize={6} fontWeight="bold">{loc.name}</text>
+                      <Marker
+                        coordinates={loc.coordinates}
+                        onClick={() => animateMapTo(loc.coordinates, 4)}
+                        style={{ cursor: "pointer" }}
+                      >
+                        {loc.attack > 0 ? (
+                          <>
+                            <circle r={loc.attack > 50 ? 5 : 4} fill="#ef4444" />
+                            <circle r={loc.attack > 50 ? 10 : 8} fill="#ef4444" opacity={0.3} className="animate-ping" />
+                          </>
+                        ) : (
+                          <circle r={3} fill="#10b981" />
+                        )}
+                        <text
+                          y={-10}
+                          x={8}
+                          fill="#cbd5f5"
+                          fontSize={7}
+                          opacity={0.9}
+                          fontWeight="bold"
+                          style={{ pointerEvents: "none" }}
+                        >
+                          {countryName}
+                        </text>
                       </Marker>
-                      
-                      {!isIndia && draws.map((draw, i) => (
-                        <RSMLine
-                          key={`arc-${idx}-${i}`}
-                          from={[loc.coordinates[0] + draw.offset, loc.coordinates[1] + draw.offset]}
-                          to={[72.8, 19.0]}
-                          stroke={draw.color}
-                          strokeWidth={draw.isAttack ? 1.5 : 0.8}
-                          strokeOpacity={draw.isAttack ? 0.8 : 0.4}
-                          strokeLinecap="round"
-                          style={{
-                            strokeDasharray: draw.isAttack ? "none" : "4 4",
-                            animation: draw.isAttack ? "dash 1.5s linear infinite" : "none"
-                          }}
-                        />
-                      ))}
+
+                      {!isDest && draws.map((draw, i) => {
+                        const startCoords = [loc.coordinates[0] + draw.offset, loc.coordinates[1] + draw.offset];
+                        return (
+                          <RSMLine
+                            key={`arc-${idx}-${i}`}
+                            from={startCoords}
+                            to={DESTINATION_SERVER}
+                            stroke={draw.color}
+                            strokeWidth={draw.isAttack ? 2 : 1}
+                            strokeOpacity={draw.isAttack ? 0.9 : 0.5}
+                            strokeLinecap="round"
+                            style={{
+                              strokeDasharray: draw.isAttack ? "none" : "4 4",
+                              animation: draw.isAttack ? "moving-dash 1.5s linear infinite" : "none"
+                            }}
+                          />
+                        );
+                      })}
                     </g>
                   );
                 })}
               </ZoomableGroup>
             </ComposableMap>
           </div>
+
         </Card>
       </section>
       {/* --- AI Chatbot Interface (Fixed) --- */}
       <Chatbot isChatOpen={isChatOpen} toggleChat={toggleChat} />
+
+      {/* Dynamic Tooltip System */}
+      {tooltipData && (
+        <div
+          className="fixed z-[9999] px-3 py-1 text-xs font-semibold text-white bg-gray-900 border border-blue-500 rounded shadow-lg pointer-events-none"
+          style={{
+            top: tooltipPosition.y + 10,
+            left: tooltipPosition.x + 10
+          }}
+        >
+          Country: {tooltipData.name}
+        </div>
+      )}
     </div>
   );
 };
