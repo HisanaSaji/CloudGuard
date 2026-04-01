@@ -1,14 +1,14 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 
-
 const firebaseConfig = {
-    apiKey: "AIzaSyCj36zTHx4unVkDpcq0lVb9n9m7XMo4DQ8",
-    authDomain: "cloudguard-c3650.firebaseapp.com",
-    projectId: "cloudguard-c3650",
-    storageBucket: "cloudguard-c3650.firebasestorage.app",
-    messagingSenderId: "721367361157",
-    appId: "1:721367361157:web:c123f77caf0097a6a2ebec"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
+
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
