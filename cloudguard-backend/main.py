@@ -138,10 +138,12 @@ def get_logs_by_date_range(from_date: str, to_date: str):
         .select("id, srcaddr, region, attack_type, action, confidence, created_at, predicted_label")
         .gte("created_at", from_date)
         .lte("created_at", to_date)
-        .order("created_at", desc=False)
+        .order("created_at", desc=True)
+        .limit(1000)
         .execute()
     )
-    return response.data or []
+    data = response.data or []
+    return list(reversed(data))
 
 def get_total_logs_count(from_date: str, to_date: str) -> int:
     """Count all logs in date range (no semantic filters)
@@ -502,12 +504,8 @@ async def get_dashboard_stats(from_date: str, to_date: str):
 
     attack_count = 0
     for log in logs:
-        try:
-            predicted_label = int(log.get("predicted_label", 0))
-        except:
-            predicted_label = 0
-
-        if predicted_label != 0:
+        pred_val = str(log.get("predicted_label", 0)).strip()
+        if pred_val not in ("0", "0.0", "False", "None", ""):
             attack_count += 1
 
     print(f"Rows treated as ATTACKS: {attack_count}")
@@ -628,13 +626,9 @@ async def get_threat_sources(from_date: str, to_date: str):
         # Safely cast predicted_label to int with fallback
         attacks = []
         for log in logs:
-            predicted_label_val = log.get("predicted_label", 0)
-            try:
-                predicted_label_val = int(predicted_label_val)
-            except (ValueError, TypeError):
-                predicted_label_val = 0
+            predicted_label_val = str(log.get("predicted_label", 0)).strip()
             
-            if predicted_label_val != 0:
+            if predicted_label_val not in ("0", "0.0", "False", "None", ""):
                 attacks.append(log)
         
         print(f"Attack logs identified: {len(attacks)}")
@@ -738,11 +732,8 @@ async def get_locations(from_date: str, to_date: str):
             parts = region_str.split(", ")
             country = parts[-1] if len(parts) > 1 else parts[0]
             
-            try:
-                pred = int(log.get("predicted_label", 0))
-            except:
-                pred = 0
-            is_attack = pred != 0
+            pred_val = str(log.get("predicted_label", 0)).strip()
+            is_attack = pred_val not in ("0", "0.0", "False", "None", "")
             
             if region_str not in location_data:
                 # Prioritize full region_str mapping if exists, else fallback to country part
@@ -925,13 +916,9 @@ async def get_timeline_data(from_date: str, to_date: str, interval: str = "hour"
         for i, log in enumerate(logs):
             # CRITICAL: Only process attack logs (predicted_label != 0)
             # Ignore benign traffic (predicted_label == 0)
-            predicted_label_val = log.get("predicted_label", 0)
-            try:
-                predicted_label_val = int(predicted_label_val)
-            except (ValueError, TypeError):
-                predicted_label_val = 0
+            predicted_label_val = str(log.get("predicted_label", 0)).strip()
             
-            if predicted_label_val == 0:
+            if predicted_label_val in ("0", "0.0", "False", "None", ""):
                 attacks_skipped_not_attack += 1
                 continue
             
@@ -1071,7 +1058,7 @@ async def get_stats_chart_data(from_date: str, to_date: str):
                 continue
             
             # Count attacks: predicted_label != 0
-            attacks = [l for l in segment if int(l.get("predicted_label", 0)) != 0]
+            attacks = [l for l in segment if str(l.get("predicted_label", 0)).strip() not in ("0", "0.0", "False", "None", "")]
             attack_count = len(attacks)
             total_attacks_data.append(attack_count)
             

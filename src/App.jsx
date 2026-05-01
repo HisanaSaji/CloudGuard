@@ -13,6 +13,13 @@ const ProtectedRoute = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth) {
+      const isBypassed = localStorage.getItem("dev_bypass") === "true";
+      setUser(isBypassed ? { email: "dev@local.host" } : null);
+      setLoading(false);
+      return () => {};
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);

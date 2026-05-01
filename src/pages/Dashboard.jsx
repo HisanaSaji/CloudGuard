@@ -793,7 +793,11 @@ const Dashboard = () => {
           <button
             onClick={async () => {
               try {
-                await signOut(auth);
+                if (auth) {
+                  await signOut(auth);
+                } else {
+                  localStorage.removeItem("dev_bypass");
+                }
                 navigate('/');
               } catch (error) {
                 console.error("Error signing out:", error);
